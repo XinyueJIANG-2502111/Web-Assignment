@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEON SLIDE - 霓虹滑动消除方块</title>
+    <!-- Import Google Fonts for futuristic cyberpunk theme / 引入未来感赛博朋克字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* ==========================================
+         * 1. 基础变量与设计系统 (Design System & Vars)
+         * ========================================== */
+        :root {
+            --cell-size: 55px;      /* 基础格子尺寸 (Size of each grid cell) */
+            --cols: 8;              /* 棋盘列数 (Columns) */
+            --rows: 10;             /* 棋盘行数 (Rows) */
+            --board-width: calc(var(--cell-size) * var(--cols));
+            --board-height: calc(var(--cell-size) * var(--rows));
+
+            /* 赛博朋克霓虹配色方案 (Neon Cyberpunk Palette) */
+            --color-bg-dark: #080815;
+            --color-board-bg: rgba(22, 36, 71, 0.7);
+            --color-neon-pink: #ff007f;
+            --color-neon-cyan: #05dfd7;
+            --color-neon-green: #00ff87;
+            --color-neon-gold: #ff9900;
+            --color-text-primary: #ffffff;
+            --color-text-secondary: #a2a2d0;
+        }
+
+        /* 响应式媒体查询：根据屏幕尺寸自适应格子大小 (Responsive Layout Settings) */
+        @media (max-width: 600px), (max-height: 800px) {
+            :root { --cell-size: 45px; }
+        }
+        @media (max-width: 420px), (max-height: 650px) {
+            :root { --cell-size: 38px; }
+        }
+        @media (max-width: 340px), (max-height: 520px) {
+            :root { --cell-size: 32px; }
+        }
+
+        body {
+            background: radial-gradient(circle at center, #1b1b3a 0%, var(--color-bg-dark) 100%);
+            color: var(--color-text-primary);
+            font-family: 'Rajdhani', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none; /* 禁止移动端默认滚动/缩放阻碍游戏拖拽 (Disable mobile zooming/scrolling) */
+        }
+
+        /* 游戏整体布局包围盒 (Game Layout Wrapper) */
+        .game-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            max-width: 480px;
+            padding: 10px;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        /* 霓虹字效标题栏 (Cyberpunk Header Styles) */
+        .game-header {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .neon-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 900;
+            margin: 0;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .neon-pink {
+            color: var(--color-neon-pink);
+            text-shadow: 0 0 5px var(--color-neon-pink), 0 0 15px var(--color-neon-pink);
+        }
+
+        .neon-cyan {
+            color: var(--color-neon-cyan);
+            text-shadow: 0 0 5px var(--color-neon-cyan), 0 0 15px var(--color-neon-cyan);
+        }
+
+        .neon-subtitle {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            letter-spacing: 5px;
+            margin-top: 2px;
+            text-transform: uppercase;
+            text-shadow: 0 0 2px rgba(162, 162, 208, 0.5);
+        }
+
+        /* 玻璃拟态计分板 (Glassmorphism Scoreboard) */
+        .stats-panel {
+            display: flex;
+            justify-content: space-between;
+            width: var(--board-width);
+            margin-bottom: 12px;
+            padding: 10px 15px;
+            background: rgba(20, 20, 35, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            box-shadow: 0 0 15px rgba(5, 223, 215, 0.1), inset 0 0 10px rgba(255, 255, 255, 0.02);
+            box-sizing: border-box;
+        }
+
+        .stat-box {
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+            letter-spacing: 1px;
+            margin-bottom: 2px;
+            font-weight: 700;
+        }
+
+        .stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+        }
+
+        /* ==========================================
+         * 2. 棋盘与网格布局 (Board & Grid Layout)
+         * ========================================== */
+        .game-board-container {
+            position: relative;
+            padding: 4px;
+            background: linear-gradient(135deg, var(--color-neon-pink), var(--color-neon-cyan));
+            border-radius: 14px;
+            box-shadow: 0 0 25px rgba(5, 223, 215, 0.2);
+        }
+
+        .game-board {
+            position: relative;
+            width: var(--board-width);
+            height: var(--board-height);
+            background-color: #0b0f24;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* CRT 扫描线复古特效覆盖层 (CRT Scanline Visual Filter) */
+        .game-board::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.04));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+            z-index: 99;
+        }
+
+        /* 背景辅助对齐线条 (Background Grid Alignment Lines) */
+        .grid-background {
+            display: grid;
+            grid-template-columns: repeat(var(--cols), var(--cell-size));
+            grid-template-rows: repeat(var(--rows), var(--cell-size));
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+            z-index: 1;
+        }
+
+        .grid-cell {
+            border: 1px solid rgba(5, 223, 215, 0.04);
+            box-sizing: border-box;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+            background-size: 8px 8px;
+        }
+
+        /* 游戏方块实体容器 (Active Game Blocks Layer) */
+        .blocks-container {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        /* ==========================================
+         * 3. 游戏方块与粒子动效 (Game Blocks & VFX)
+         * ========================================== */
+        .block {
+            position: absolute;
+            box-sizing: border-box;
+            height: var(--cell-size);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            cursor: grab;
+            pointer-events: auto; /* 让方块层能点击，容器本身穿透 */
+            /* 渐进平滑插值：当 JS 控制 top/left 时触发 */
+            transition: left 0.15s ease-out, top 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5), 0 0 10px var(--glow-color);
+        }
+
+        /* 鼠标按下/拖拽中视觉回馈 (Drag visual feedback) */
+        .block.dragging {
+            cursor: grabbing;
+            transform: scale(1.02);
+            box-shadow: 0 12px 20px rgba(0,0,0,0.6), 0 0 20px var(--glow-color);
+            z-index: 100;
+        }
+
+        /* 3D 反光图层效果 (Glossy reflective overlay via pseudo-element) */
+        .block::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.05) 35%, transparent 35%, transparent 100%);
+            border-radius: 7px;
+            pointer-events: none;
+        }
+
+        /* 根据 Size 映射专属渐变背景与霓虹辉光 (Gradient Background & Glow mapping) */
+        .block[data-size="1"] {
+            --glow-color: var(--color-neon-pink);
+            width: calc(var(--cell-size) * 1);
+            background: linear-gradient(135deg, #ff007f, #7f00ff);
+        }
+
+        .block[data-size="2"] {
+            --glow-color: var(--color-neon-cyan);
+            width: calc(var(--cell-size) * 2);
+            /* 多格方块附带分割线背景，展现由单格拼接的高级质感 (Grid separations decoration) */
+            background: repeating-linear-gradient(90deg, transparent, transparent calc(var(--cell-size) - 1px), rgba(0, 0, 0, 0.25) calc(var(--cell-size) - 1px), rgba(0, 0, 0, 0.25) var(--cell-size)), 
+                        linear-gradient(135deg, #00f2fe, #4facfe);
+        }
+
+        .block[data-size="3"] {
+            --glow-color: var(--color-neon-green);
+            width: calc(var(--cell-size) * 3);
+            background: repeating-linear-gradient(90deg, transparent, transparent calc(var(--cell-size) - 1px), rgba(0, 0, 0, 0.25) calc(var(--cell-size) - 1px), rgba(0, 0, 0, 0.25) var(--cell-size)), 
+                        linear-gradient(135deg, #00ff87, #60efff);
+        }
+
+        .block[data-size="4"] {
+            --glow-color: var(--color-neon-gold);
+            width: calc(var(--cell-size) * 4);
+            background: repeating-linear-gradient(90deg, transparent, transparent calc(var(--cell-size) - 1px), rgba(0, 0, 0, 0.25) calc(var(--cell-size) - 1px), rgba(0, 0, 0, 0.25) var(--cell-size)), 
+                        linear-gradient(135deg, #ff9900, #ff007f);
+        }
+
+        /* 消除状态下：合并发光并微微收缩 (VFX: Glowing neon line-clear state) */
+        .block.clearing {
+            background: transparent !important;
+            border: 3px solid var(--glow-color) !important;
+            box-shadow: 0 0 25px var(--glow-color), inset 0 0 15px var(--glow-color);
+            transform: scale(0.92);
+            transition: all 0.2s ease-in-out;
+            z-index: 101;
+        }
+
+        /* 消除爆裂出的发光粒子 (Explosion Particles Styles) */
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 102;
+            /* 粒子朝四周随机散射淡出 (Particles burst out and fade) */
+            animation: particle-burst 0.6s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+        }
+
+        @keyframes particle-burst {
+            0% {
+                transform: translate(0, 0) scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(var(--tx), var(--ty)) scale(0);
+                opacity: 0;
+            }
+        }
+
+        /* 连击浮动数字显示特效 (Combo Multiplier Floating VFX) */
+        .combo-vfx {
+            position: absolute;
+            top: 40%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 10px var(--color-neon-pink), 0 0 20px var(--color-neon-cyan);
+            pointer-events: none;
+            z-index: 200;
+            animation: combo-animation 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes combo-animation {
+            0% { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
+            30% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -100%) scale(1); opacity: 0; }
+        }
+
+        /* ==========================================
+         * 4. 按钮控制栏与弹出层 (Controllers & Overlay)
+         * ========================================== */
+        .control-panel {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            width: var(--board-width);
+            margin-top: 15px;
+        }
+
+        .icon-button {
+            background: rgba(26, 26, 46, 0.7);
+            border: 1px solid rgba(5, 223, 215, 0.3);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: all 0.2s ease;
+        }
+
+        .icon-button svg {
+            width: 22px;
+            height: 22px;
+            fill: var(--color-neon-cyan);
+            transition: fill 0.2s ease;
+        }
+
+        .icon-button:hover {
+            border-color: var(--color-neon-pink);
+            box-shadow: 0 0 12px rgba(255, 0, 127, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .icon-button:hover svg {
+            fill: var(--color-neon-pink);
+        }
+
+        .icon-button:active {
+            transform: scale(0.95);
+        }
+
+        /* 游戏静音状态的红色高亮 (Muted indicator) */
+        .icon-button.muted svg {
+            fill: #666;
+        }
+        .icon-button.muted {
+            border-color: #666;
+        }
+
+        /* 全局遮罩背景基板 (Overlay Base Panel) */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(8, 8, 21, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .overlay-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--color-neon-pink);
+            text-shadow: 0 0 10px var(--color-neon-pink);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .overlay-subtitle {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.1rem;
+            color: var(--color-text-secondary);
+            letter-spacing: 4px;
+            margin-bottom: 25px;
+        }
+
+        .final-score-display {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 600;
+            margin-bottom: 30px;
+            color: #fff;
+        }
+
+        .final-score-display span {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--color-neon-cyan);
+            text-shadow: 0 0 8px var(--color-neon-cyan);
+            font-weight: 700;
+        }
+
+        /* 赛博霓虹感发光按钮 (Cyberpunk Glowing Neon Button) */
+        .neon-button {
+            font-family: 'Orbitron', sans-serif;
+            background: transparent;
+            border: 2px solid var(--color-neon-cyan);
+            color: var(--color-neon-cyan);
+            padding: 12px 24px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(5, 223, 215, 0.2);
+            transition: all 0.25s ease;
+            letter-spacing: 1px;
+        }
+
+        .neon-button:hover {
+            background: var(--color-neon-cyan);
+            color: #000;
+            box-shadow: 0 0 20px var(--color-neon-cyan);
+        }
+
+        .neon-button.small {
+            padding: 8px 16px;
+            font-size: 0.8rem;
+        }
+
+        /* 帮助弹窗样式 (Help Modal Styles) */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background: #111428;
+            border: 2px solid var(--color-neon-pink);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 0 25px rgba(255, 0, 127, 0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            padding: 15px 20px;
+            background: rgba(255, 0, 127, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 0, 127, 0.2);
+        }
+
+        .modal-header h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            margin: 0;
+            color: var(--color-neon-pink);
+            text-shadow: 0 0 5px var(--color-neon-pink);
+        }
+
+        .close-button {
+            background: transparent;
+            border: none;
+            color: var(--color-text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+
+        .close-button:hover {
+            color: #fff;
+        }
+
+        .modal-body {
+            padding: 20px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: var(--color-text-secondary);
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .modal-body ul {
+            padding-left: 20px;
+            margin: 0;
+        }
+
+        .modal-body li {
+            margin-bottom: 10px;
+        }
+
+        .modal-body strong {
+            color: #fff;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: flex-end;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-wrapper">
+        <!-- 头部标题栏 -->
+        <header class="game-header">
+            <h1 class="neon-title"><span class="neon-pink">NEON</span> <span class="neon-cyan">SLIDE</span></h1>
+            <div class="neon-subtitle">SLIDE • DROP • CLEAR</div>
+        </header>
+
+        <!-- 计分板 -->
+        <div class="stats-panel">
+            <div class="stat-box">
+                <div class="stat-label">SCORE</div>
+                <div class="stat-value" id="score">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">HIGH SCORE</div>
+                <div class="stat-value" id="high-score">0</div>
+            </div>
+        </div>
+
+        <!-- 棋盘主界面 -->
+        <div class="game-board-container">
+            <div class="game-board" id="game-board">
+                <!-- 背景定位网格线 -->
+                <div class="grid-background" id="grid-background"></div>
+                <!-- 渲染方块的实体容器 -->
+                <div class="blocks-container" id="blocks-container"></div>
+                
+                <!-- 游戏结束面板 -->
+                <div class="overlay" id="game-over-overlay">
+                    <div class="overlay-title">SYSTEM OVERLOAD</div>
+                    <div class="overlay-subtitle">GAME OVER</div>
+                    <div class="final-score-display">
+                        FINAL SCORE: <span id="final-score">0</span>
+                    </div>
+                    <button class="neon-button" onclick="restartGame()">REBOOT SYSTEM</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 下方控制栏 -->
+        <div class="control-panel">
+            <button class="icon-button" id="btn-help" onclick="toggleHelp(true)" title="How to Play">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 16h-2v-2h2v2zm1.07-7.75l-.9.92C12.45 11.9 12 12.5 12 14h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
+            </button>
+            <button class="icon-button" id="btn-mute" onclick="toggleMute()" title="Toggle Sound">
+                <svg id="mute-icon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+            </button>
+            <button class="icon-button" id="btn-restart" onclick="restartGame()" title="Restart">
+                <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- 玩法说明弹窗 -->
+    <div class="modal-overlay" id="help-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>HOW TO PLAY</h2>
+                <button class="close-button" onclick="toggleHelp(false)">&times;</button>
+            </div>
+            <div class="modal-body">
+                <ul>
+                    <li><strong>拖拽滑动 (Drag Blocks):</strong> 左右水平拖拽方块，不允许纵向移动。(Drag blocks horizontally. Y-axis is locked.)</li>
+                    <li><strong>重力下落 (Gravity Settle):</strong> 玩家松开手指后，悬空的方块会根据重力受控垂直坠落。(Unsuppoted blocks fall under gravity after release.)</li>
+                    <li><strong>满行消除 (Clear Lines):</strong> 填满任意横向整行即可消除并斩得分数！(Fill an entire row to clear it and score points.)</li>
+                    <li><strong>连续爆发 (Combo Multiplier):</strong> 如果消除引起的坠落引发了新一轮消除，将激发 Combo 分数倍增！(Consecutive drops leading to clears trigger Combo multiplier bonuses.)</li>
+                    <li><strong>系统推移 (Grid Shift):</strong> 每一回合结束时，棋盘整体向上位移一行，底部推入一排安全方块。(At turn end, board shifts up, pushing a new row from bottom.)</li>
+                    <li><strong>触顶超载 (Game Over):</strong> 若有任何方块被挤入最顶层 (y=0)，系统崩溃，游戏结束！(If any block enters row y=0, game is over.)</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button class="neon-button small" onclick="toggleHelp(false)">ACKNOWLEDGED</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. 全局配置与状态 (Global Config & State)
+        // ==========================================
+        const COLS = 8;       // 列数 (Columns)
+        const ROWS = 10;      // 行数 (Rows)
+
+        const gridBg = document.getElementById('grid-background');
+        const blocksContainer = document.getElementById('blocks-container');
+
+        // 初始化背景定位线 (Dynamically create background grid cells)
+        for (let i = 0; i < COLS * ROWS; i++) {
+            const cell = document.createElement('div');
+            cell.classList.add('grid-cell');
+            gridBg.appendChild(cell);
+        }
+
+        // 二维数据矩阵决定物理的真实世界：存 { id, size } 或 null
+        // Logical matrix representing absolute game board truth
+        let grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+        
+        let currentScore = 0;
+        let highScore = parseInt(localStorage.getItem('dropdom_high_score')) || 0;
+        document.getElementById('high-score').innerText = highScore;
+
+        let isLocked = false; // 状态锁：在动画播放和结算期间拦截用户输入 (Status lock to block user inputs during animations)
+
+        // 统一延迟辅助函数 (Delay Helper Promise)
+        const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        // 随机唯一ID生成器 (Unique ID Generator for block segments tracking)
+        function generateUniqueId() {
+            return 'b_' + Math.random().toString(36).substring(2, 11);
+        }
+
+        // 获取当前自适应下的每个格子像素大小 (Read dynamic cell size based on CSS runtime)
+        function getCellSize() {
+            return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size')) || 55;
+        }
+
+        // ==========================================
+        // 2. 网页音频合成引擎 (Synthesized Web Audio SFX)
+        // ==========================================
+        let audioCtx = null;
+        let isMuted = false;
+
+        // 初始化音频上下文 (Lazy load/resume AudioContext)
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        // 纯代码实时生成的赛博电子音效，无任何静态文件依赖 (Synth game sound effects dynamically)
+        function playSFX(type) {
+            if (isMuted) return;
+            try {
+                initAudio();
+                const now = audioCtx.currentTime;
+                
+                if (type === 'snap') {
+                    // 吸附网格清脆音 (Crisp snap click)
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(650, now);
+                    osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
+                    
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.linearRampToValueAtTime(0.001, now + 0.08);
+                    
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } 
+                else if (type === 'bounce') {
+                    // 复位反弹沉重音 (Heavy return slide)
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(140, now);
+                    osc.frequency.linearRampToValueAtTime(80, now + 0.1);
+                    
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.001, now + 0.1);
+                    
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                }
+                else if (type === 'fall') {
+                    // 重力下落深频扫音 (Deep sweep for gravity drops)
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(130, now);
+                    osc.frequency.exponentialRampToValueAtTime(45, now + 0.22);
+                    
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.001, now + 0.22);
+                    
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.22);
+                }
+                else if (type === 'clear') {
+                    // 炫彩清脆高频和弦 (High chords for line clearance)
+                    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                    notes.forEach((freq, i) => {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, now + i * 0.05);
+                        
+                        gain.gain.setValueAtTime(0.12, now + i * 0.05);
+                        gain.gain.linearRampToValueAtTime(0.001, now + i * 0.05 + 0.18);
+                        
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start(now + i * 0.05);
+                        osc.stop(now + i * 0.05 + 0.18);
+                    });
+                }
+                else if (type === 'shift') {
+                    // 棋盘上升的机械拉升声 (Mechanical lift sweep when rows shift up)
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(160, now);
+                    osc.frequency.linearRampToValueAtTime(260, now + 0.25);
+                    
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0.001, now + 0.25);
+                    
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                }
+                else if (type === 'gameover') {
+                    // 系统故障下坠音调 (Sad falling game over melody)
+                    const sadNotes = [392.00, 349.23, 311.13, 261.63]; // G4, F4, Eb4, C4
+                    sadNotes.forEach((freq, i) => {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(freq, now + i * 0.18);
+                        
+                        gain.gain.setValueAtTime(0.15, now + i * 0.18);
+                        gain.gain.linearRampToValueAtTime(0.001, now + i * 0.18 + 0.35);
+                        
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start(now + i * 0.18);
+                        osc.stop(now + i * 0.18 + 0.35);
+                    });
+                }
+            } catch (err) {
+                console.warn("Audio Context init/play blocked by user interaction gesture: ", err);
+            }
+        }
+
+        // 音频开关转换 (Toggle audio state visually and logically)
+        function toggleMute() {
+            isMuted = !isMuted;
+            const btnMute = document.getElementById('btn-mute');
+            const muteIcon = document.getElementById('mute-icon');
+            if (isMuted) {
+                btnMute.classList.add('muted');
+                muteIcon.innerHTML = `<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.21.05-.42.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>`;
+            } else {
+                btnMute.classList.remove('muted');
+                muteIcon.innerHTML = `<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>`;
+                initAudio();
+                playSFX('snap');
+            }
+        }
+
+        // ==========================================
+        // 3. 高级生成与对齐算法 (Gap-based Generation)
+        // ==========================================
+        /**
+         * 逆向留白法：生成绝对安全且有解的新行 (Gap-based Generation)
+         * 先在行内挖出 1~2 个空格，再切分剩余实体格为 1~4 长度的方块
+         * @param {boolean} isNewRow - 是否标记为即将滑入的新行 (True flags it for slide-in animation)
+         */
+        function generateSafeRow(isNewRow = false) {
+            let row = new Array(COLS).fill(null);
+            
+            // 挑选 1~2 个随机独立列作为这一行的空余槽 (Pick 1 or 2 slots as grid gaps)
+            const gapCount = Math.random() > 0.55 ? 2 : 1;
+            let gapPositions = new Set();
+            while (gapPositions.size < gapCount) {
+                gapPositions.add(Math.floor(Math.random() * COLS));
+            }
+
+            let i = 0;
+            while (i < COLS) {
+                if (gapPositions.has(i)) {
+                    i++;
+                    continue; // 遇空格，直接跳过 (Jump over the gaps)
+                }
+
+                // 统计到下一个空格前，当前可铺设实体块的最大跨度
+                // Determine max continuous width until hit a gap or boundary
+                let maxLen = 1;
+                while (maxLen < 4 && (i + maxLen) < COLS && !gapPositions.has(i + maxLen)) {
+                    maxLen++;
+                }
+                
+                // 随机决定当前方块的最终长度并赋予唯一标识
+                // Assign a randomized sizing to this structural puzzle block
+                let blockLen = Math.floor(Math.random() * maxLen) + 1;
+                let blockId = generateUniqueId();
+
+                // 填充逻辑矩阵以追踪它作为一个大方块的原子特性 (Fill the matrix cells)
+                for (let l = 0; l < blockLen; l++) {
+                    row[i + l] = { id: blockId, size: blockLen };
+                    if (isNewRow) {
+                        row[i + l].isNewRow = true; // 挂载入场动画标签 (Mark flag for slide-in transition)
+                    }
+                }
+                
+                i += blockLen;
+            }
+            return row;
+        }
+
+        // ==========================================
+        // 4. 重力级联下落与满行消除 (Gravity & Clears)
+        // ==========================================
+        /**
+         * 自底向上级联重力扫描 (Bottom-up single pass settling)
+         * 扫描全部悬空的多格长方块，在单次扫描中直接计算出能沉降的最大深度
+         * 只有当 it 下方占据的所有列均为空 null 时才可以下落
+         */
+        function settleGravityFull() {
+            let hasMoved = false;
+            
+            // 倒数第二行 (y = 8) 向上遍历至顶端（最底行 y=9 无法继续沉降）
+            // Traverse from row 8 up to row 0
+            for (let y = ROWS - 2; y >= 0; y--) {
+                for (let x = 0; x < COLS; x++) {
+                    let block = grid[y][x];
+                    
+                    if (block !== null) {
+                        let blockId = block.id;
+                        let size = block.size;
+                        let startX = x;
+                        
+                        // 纵向探底：计算该方块在此位置允许下落的最大行数
+                        // Vertical scan: calculate maximum dropping rows
+                        let dropRows = 0;
+                        while (true) {
+                            let nextY = y + dropRows + 1;
+                            if (nextY >= ROWS) break; // 到底部边界 (Reached bottom)
+                            
+                            // 检查该方块跨越的每一列的下方一格是否都是 null
+                            // Ensure all columns directly below are null (empty)
+                            let canDropNext = true;
+                            for (let i = 0; i < size; i++) {
+                                if (grid[nextY][startX + i] !== null) {
+                                    canDropNext = false;
+                                    break;
+                                }
+                            }
+                            
+                            if (canDropNext) {
+                                dropRows++;
+                            } else {
+                                break;
+                            }
+                        }
+                        
+                        // 逻辑下移并在旧位置补 null
+                        // Move block in matrix representation and wipe previous cells
+                        if (dropRows > 0) {
+                            for (let i = 0; i < size; i++) {
+                                grid[y + dropRows][startX + i] = grid[y][startX + i];
+                                grid[y][startX + i] = null;
+                            }
+                            hasMoved = true;
+                        }
+                        
+                        // 跳过当前长方块的其余列，防重复扫描 (Skip processed segment columns)
+                        x += (size - 1);
+                    }
+                }
+            }
+            return hasMoved;
+        }
+
+        /**
+         * 异步满行判定与三阶段消除序列 (Asynchronous line clear sequence)
+         * @returns {Promise<number>} 返回本次消除的行数 (Resolves with count of lines cleared)
+         */
+        function clearLinesAsync() {
+            return new Promise((resolve) => {
+                let linesToClear = [];
+                
+                // 1. 甄别出填满的横行 (Find full lines)
+                for (let y = 0; y < ROWS; y++) {
+                    if (grid[y].every(cell => cell !== null)) {
+                        linesToClear.push(y);
+                    }
+                }
+
+                if (linesToClear.length === 0) {
+                    resolve(0);
+                    return;
+                }
+
+                // 2. 收集满行上对应的方块唯一 ID
+                // Collect unique block IDs in target lines
+                let idsToClear = new Set();
+                linesToClear.forEach(y => {
+                    grid[y].forEach(cell => {
+                        if (cell) idsToClear.add(cell.id);
+                    });
+                });
+
+                // 第一阶段：合并与发光 (Phase 1: Apply glowing class to trigger neon visual scale-down)
+                idsToClear.forEach(id => {
+                    const blockEl = document.querySelector(`.block[data-id="${id}"]`);
+                    if (blockEl) {
+                        blockEl.classList.add('clearing');
+                    }
+                });
+
+                // 第二阶段 & 第三阶段：发光 200ms 后释放爆炸粒子并对 DOM 进行垃圾回收 (Phase 2 & 3: Burst particles & GC)
+                setTimeout(() => {
+                    idsToClear.forEach(id => {
+                        const blockEl = document.querySelector(`.block[data-id="${id}"]`);
+                        if (blockEl) {
+                            createParticles(blockEl);
+                            blockEl.remove();
+                        }
+                    });
+
+                    // 清空逻辑矩阵中已被消除的数据 (Clear logic grid cells)
+                    linesToClear.forEach(y => {
+                        grid[y] = new Array(COLS).fill(null);
+                    });
+
+                    resolve(linesToClear.length);
+                }, 200);
+            });
+        }
+
+        /**
+         * 粒子爆裂动效：以方块为中心呈 360 度圆锥随机散射减速淡出 (VFX: Fading particles explosion)
+         * @param {HTMLElement} element - 发射源 DOM (Exploding source block node)
+         */
+        function createParticles(element) {
+            const rect = {
+                left: parseFloat(element.style.left),
+                top: parseFloat(element.style.top),
+                width: element.offsetWidth,
+                height: element.offsetHeight
+            };
+
+            const size = parseInt(element.getAttribute('data-size'));
+            
+            // 根据方块大小及渐变颜色，动态投射粒子配色
+            // Pick corresponding neon colors based on block sizing definitions
+            let color = '#05dfd7';
+            if (size === 1) color = '#ff007f';
+            if (size === 2) color = '#00f2fe';
+            if (size === 3) color = '#00ff87';
+            if (size === 4) color = '#ff9900';
+
+            const cellSize = getCellSize();
+            // 方块宽度越大，生成爆裂粒子越密集 (Width-scaled particle count density)
+            const particleCount = Math.floor((rect.width / cellSize) * 8) + 8;
+
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.classList.add('particle');
+
+                // 粒子出生位置：散布在消逝物内部 (Random birth offset within geometry boundaries)
+                const pX = rect.left + Math.random() * rect.width;
+                const pY = rect.top + Math.random() * rect.height;
+                
+                particle.style.left = `${pX}px`;
+                particle.style.top = `${pY}px`;
+                particle.style.background = color;
+                particle.style.boxShadow = `0 0 10px ${color}, 0 0 18px ${color}`;
+
+                // 360度圆锥向量方向及初速度跨度 (Define dynamic directional vector paths)
+                const angle = Math.random() * 2 * Math.PI;
+                const distance = 40 + Math.random() * 85; 
+                const targetX = Math.cos(angle) * distance;
+                const targetY = Math.sin(angle) * distance;
+
+                // 写入 CSS 自定义运行时参数控制位移
+                // Set parameters dynamically into CSS custom props
+                particle.style.setProperty('--tx', `${targetX}px`);
+                particle.style.setProperty('--ty', `${targetY}px`);
+
+                // 随机缩放粒子生命期和大小以取得景深感 (Add variety in scale and timeline)
+                const pSize = 3 + Math.random() * 5;
+                particle.style.width = `${pSize}px`;
+                particle.style.height = `${pSize}px`;
+                particle.style.animationDuration = `${0.35 + Math.random() * 0.35}s`;
+
+                blocksContainer.appendChild(particle);
+
+                // 播放结束后自我移除：防内存泄漏 (Self-destruct on completion to avoid memory leaks)
+                particle.addEventListener('animationend', () => {
+                    particle.remove();
+                });
+            }
+        }
+
+        // ==========================================
+        // 5. 虚拟 DOM 复用渲染引擎 (Reconciling Renderer)
+        // ==========================================
+        /**
+         * 数据驱动渲染器：只增量更新/复用/销毁 DOM 节点 (Incremental Reconciling Render Engine)
+         * 从而让方块在 matrix 更改后触发 CSS transition 的平滑下坠动效
+         */
+        function renderGrid() {
+            const cellSize = getCellSize();
+            const activeIds = new Set();
+            
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    let cell = grid[y][x];
+                    if (cell !== null) {
+                        const blockId = cell.id;
+                        const size = cell.size;
+                        activeIds.add(blockId);
+                        
+                        let blockEl = document.querySelector(`.block[data-id="${blockId}"]`);
+                        if (!blockEl) {
+                            // DOM 不存在该 ID，进行新创建 (Create new element if not exists)
+                            blockEl = document.createElement('div');
+                            blockEl.classList.add('block');
+                            blockEl.setAttribute('data-id', blockId);
+                            blockEl.setAttribute('data-size', size);
+                            
+                            // 检测是否是新生成底排的滑入方块
+                            // Check if this block should animate sliding up from below the board
+                            if (cell.isNewRow) {
+                                // 初始高度定在可视界限 y=10 (Position at row 10, below visible area)
+                                blockEl.style.top = `${ROWS * cellSize}px`;
+                                blockEl.style.left = `${x * cellSize}px`;
+                                blockEl.style.transition = 'none'; // 先断开过渡放置 (Place without transition)
+                                blocksContainer.appendChild(blockEl);
+                                
+                                // 强制回流以让渲染树捕捉起点位置 (Force reflow)
+                                blockEl.offsetHeight;
+                                
+                                // 接回 transition，并赋予它的真实逻辑坐标触发滑动效果
+                                // Re-enable transitions and trigger upward slide transition
+                                blockEl.style.transition = 'left 0.15s ease-out, top 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+                                blockEl.style.top = `${y * cellSize}px`;
+                                delete cell.isNewRow; // 移除一次性标记
+                            } else {
+                                blockEl.style.left = `${x * cellSize}px`;
+                                blockEl.style.top = `${y * cellSize}px`;
+                                blocksContainer.appendChild(blockEl);
+                            }
+                        } else {
+                            // DOM 节点已存在：直接重置绝对定位 (Reuse and translate position)
+                            // 此时若 top 发生变化，会自动播放 CSS 沉降过渡
+                            blockEl.style.left = `${x * cellSize}px`;
+                            blockEl.style.top = `${y * cellSize}px`;
+                        }
+                        
+                        x += (size - 1); // 越过长方块跨越的列 (Skip multi-columns)
+                    }
+                }
+            }
+            
+            // 垃圾回收：清理逻辑矩阵中不复存在的游离 DOM 节点 (GC leftover elements)
+            const existingElements = blocksContainer.querySelectorAll('.block');
+            existingElements.forEach(el => {
+                const id = el.getAttribute('data-id');
+                // 不在 grid 里，且不处于正在消除特效的状态下，则彻底删除
+                if (!activeIds.has(id) && !el.classList.contains('clearing')) {
+                    el.remove();
+                }
+            });
+        }
+
+        // ==========================================
+        // 6. 极致顺滑的指针拖拽交互 (Responsive Pointer Drag)
+        // ==========================================
+        let dragInfo = {
+            isDragging: false,
+            element: null,
+            blockId: null,
+            size: 0,
+            gridY: 0,
+            startX: 0,
+            pointerStartX: 0,   
+            originalLeft: 0,
+            minGridX: 0,        
+            maxGridX: 0         
+        };
+
+        // 全平台输入：利用 Pointer Events 兼容手机和电脑
+        blocksContainer.addEventListener('pointerdown', (e) => {
+            if (isLocked) return; // 结算状态下完全锁死操作 (Inputs fully disabled when locked)
+            
+            const targetBlock = e.target.closest('.block');
+            // 防止点中已处在消除动画进程的方块 (Ignore clicking elements that are clearing)
+            if (!targetBlock || targetBlock.classList.contains('clearing')) return;
+
+            // 锁定该指针到当前方块 (Lock pointer to target)
+            targetBlock.setPointerCapture(e.pointerId);
+
+            const blockId = targetBlock.getAttribute('data-id');
+            const size = parseInt(targetBlock.getAttribute('data-size'));
+            
+            // 逆向反查该方块在物理网格中的起点 gridX 和 y 坐标
+            // Reverse search layout grid coordinates for selected block
+            let gridY = -1;
+            let gridX = -1;
+            for (let y = 0; y < ROWS; y++) {
+                gridX = grid[y].findIndex(cell => cell && cell.id === blockId);
+                if (gridX !== -1) {
+                    gridY = y;
+                    break;
+                }
+            }
+
+            if (gridX === -1) return;
+
+            dragInfo.isDragging = true;
+            dragInfo.element = targetBlock;
+            dragInfo.blockId = blockId;
+            dragInfo.size = size;
+            dragInfo.gridY = gridY;
+            dragInfo.startX = gridX;
+            dragInfo.pointerStartX = e.clientX;
+            
+            const cellSize = getCellSize();
+            dragInfo.originalLeft = gridX * cellSize;
+
+            // 拖拽手感优化：临时剔除 CSS 动画以取得无滞后跟随
+            // Temporarily disable CSS animation during drag to align pixel response
+            targetBlock.style.transition = 'none';
+            targetBlock.classList.add('dragging');
+
+            // 边界扫描计算 (Limit scanners)：根据左右邻近方块/棋盘边框动态划定移动硬范围
+            let leftLimit = gridX;
+            while (leftLimit > 0 && grid[gridY][leftLimit - 1] === null) {
+                leftLimit--;
+            }
+            
+            let rightLimit = gridX;
+            while ((rightLimit + size) < COLS && grid[gridY][rightLimit + size] === null) {
+                rightLimit++;
+            }
+
+            dragInfo.minGridX = leftLimit;
+            dragInfo.maxGridX = rightLimit;
+            
+            playSFX('snap');
+        });
+
+        // 移动阶段限制：拖拽阶段彻底锁死 Y 轴（只处理 X 位移）
+        document.addEventListener('pointermove', (e) => {
+            if (!dragInfo.isDragging) return;
+
+            let deltaX = e.clientX - dragInfo.pointerStartX;
+            let targetLeft = dragInfo.originalLeft + deltaX;
+
+            const cellSize = getCellSize();
+            let minLeft = dragInfo.minGridX * cellSize;
+            let maxLeft = dragInfo.maxGridX * cellSize;
+
+            // 越界硬裁剪限制 (Hard clamping based on calculated range)
+            if (targetLeft < minLeft) targetLeft = minLeft;
+            if (targetLeft > maxLeft) targetLeft = maxLeft;
+
+            dragInfo.element.style.left = `${targetLeft}px`;
+        });
+
+        // 指针释放与对齐吸附结算机制 (Release pointer and snap-to-grid settlement)
+        const endDrag = async (e) => {
+            if (!dragInfo.isDragging) return;
+            dragInfo.isDragging = false;
+            
+            isLocked = true; // 锁定状态机防止连击或多次拖动冲突 (Lock state machine)
+
+            const el = dragInfo.element;
+            el.classList.remove('dragging');
+            
+            // 重新接入 Transition 顺滑过渡
+            el.style.transition = 'left 0.15s ease-out, top 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+
+            let currentLeft = parseFloat(el.style.left);
+            const cellSize = getCellSize();
+            
+            // 四舍五入对齐到最近的格子列 index
+            // Round floating pixels to the nearest grid column index
+            let targetGridX = Math.round(currentLeft / cellSize);
+
+            // 安全裁剪防逸出 (Safety validation)
+            if (targetGridX < dragInfo.minGridX) targetGridX = dragInfo.minGridX;
+            if (targetGridX > dragInfo.maxGridX) targetGridX = dragInfo.maxGridX;
+
+            // 辨别是否确实发生了有效的格位转移
+            // Check if actual grid relocation happened
+            if (targetGridX !== dragInfo.startX) {
+                let blockData = grid[dragInfo.gridY][dragInfo.startX];
+                
+                // 1. 清除原先所在的旧单元格
+                for (let i = 0; i < dragInfo.size; i++) {
+                    grid[dragInfo.gridY][dragInfo.startX + i] = null;
+                }
+                // 2. 将引用填充到新落脚点
+                for (let i = 0; i < dragInfo.size; i++) {
+                    grid[dragInfo.gridY][targetGridX + i] = blockData;
+                }
+
+                // 3. 驱动方块吸附对齐到网格 (Trigger snapping visually)
+                el.style.left = `${targetGridX * cellSize}px`;
+                playSFX('snap');
+
+                // 等待吸附对齐过渡（150ms）后进入全局轮转
+                // Wait for the slide-to-snap transition to finish
+                await delay(150);
+
+                // 驱动核心状态机流动 (Run game turn loop)
+                await resolveGameTurnAsync();
+            } else {
+                // 如果没有产生位移，平滑回弹归位并立刻解锁输入
+                // Revert to original coordinates if dropped in place
+                el.style.left = `${dragInfo.originalLeft}px`;
+                playSFX('bounce');
+                await delay(150); 
+                isLocked = false; 
+            }
+        };
+
+        document.addEventListener('pointerup', endDrag);
+        document.addEventListener('pointercancel', endDrag);
+
+        // ==========================================
+        // 7. 核心异步游戏状态轮转中心 (State Machine)
+        // ==========================================
+        /**
+         * 异步回合流转：以 Promise 时序逐个播放下落、爆炸、二连、向上移位
+         * Fully asynchronous game state loop to align rendering transitions
+         */
+        async function resolveGameTurnAsync() {
+            isLocked = true; 
+            
+            let comboCount = 0;
+            let clearedInTurn = 0;
+
+            // 连续级联循环：方块下落 -> 检查满行 -> 消除 -> 再次下落 -> 再次检查满行
+            // Cascade Gravity Loop: settle, clear, repeat if cleared
+            while (true) {
+                // 执行沉降，更新逻辑矩阵
+                let fell = settleGravityFull();
+                if (fell) {
+                    renderGrid();
+                    playSFX('fall');
+                    // 挂起等待坠落过渡完毕 (Wait for gravity drop transitions)
+                    await delay(250); 
+                }
+                
+                // 触发满行异步扫描消除
+                let linesCleared = await clearLinesAsync();
+                if (linesCleared > 0) {
+                    clearedInTurn += linesCleared;
+                    comboCount++;
+                    
+                    // 二连消（Combo）以上触发屏幕炫酷提示效
+                    // Multi-combo banner prompt
+                    if (comboCount > 1) {
+                        showComboVFX(comboCount);
+                    }
+                    
+                    playSFX('clear');
+                    // 给予霓虹变透明发光 (200ms) + 粒子飞散阻尼衰减 (300ms) 缓冲周期
+                    // Pause for glowing vfx & particle durations
+                    await delay(500); 
+                    
+                    renderGrid(); // 重塑网格，将游离的旧 DOM 剔除 (Redraw board)
+                } else {
+                    // 没有再引发任何消除，本次坠落级联结束，跳出循环
+                    break;
+                }
+            }
+
+            // 给予短暂节奏停留
+            await delay(250);
+
+            // 触顶判定一：当前有方块停留在 y=0，则直接宣布失败 (Ceiling check before shift)
+            if (grid[0].some(cell => cell !== null)) {
+                triggerGameOver();
+                return;
+            }
+
+            // 系统往上推移一行 (Shift board up by 1 row)
+            await shiftBoardUpAsync();
+
+            // 上升后有可能由于空位顶替，触发第二波连环重力沉降
+            // Settle gravity again after push, in case gaps settle
+            while (true) {
+                let fell = settleGravityFull();
+                if (fell) {
+                    renderGrid();
+                    playSFX('fall');
+                    await delay(250);
+                }
+                
+                let linesCleared = await clearLinesAsync();
+                if (linesCleared > 0) {
+                    clearedInTurn += linesCleared;
+                    comboCount++;
+                    if (comboCount > 1) {
+                        showComboVFX(comboCount);
+                    }
+                    playSFX('clear');
+                    await delay(500);
+                    renderGrid();
+                } else {
+                    break;
+                }
+            }
+
+            // 触顶判定二：底部推新后，再次复查 y=0 (Ceiling check after shift & settle)
+            if (grid[0].some(cell => cell !== null)) {
+                triggerGameOver();
+                return;
+            }
+
+            // 结算分数与连击加成
+            // Calculate final scores and high score storage
+            if (clearedInTurn > 0) {
+                updateScores(clearedInTurn, comboCount);
+            }
+
+            // 最终解锁游戏手感
+            isLocked = false;
+        }
+
+        /**
+         * 矩阵上推并从底端生成滑入新行 (Shift rows up & push new row)
+         */
+        async function shiftBoardUpAsync() {
+            // 逐行将格子元素内容拷贝至上一行 (Copy cell variables to row above)
+            for (let y = 0; y < ROWS - 1; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    grid[y][x] = grid[y + 1][x];
+                }
+            }
+            
+            // 底部生成一排带 isNewRow = true 入场标记的安全新行
+            // Fill bottom row with generated blocks and slide flags
+            let newRow = generateSafeRow(true);
+            for (let x = 0; x < COLS; x++) {
+                grid[ROWS - 1][x] = newRow[x];
+            }
+            
+            // 驱动渲染引擎：这会促使老方块向 y-1 滑行，同时新底盘从下方滑入 (Animate both shifts)
+            renderGrid();
+            playSFX('shift');
+            
+            // 等待上升滑动特效动画时长完毕
+            await delay(250);
+        }
+
+        // ==========================================
+        // 8. 游戏润色辅助逻辑 (Polish & Helpers)
+        // ==========================================
+        /**
+         * 结算所得分数并做本地持久化储存 (Score counter & Storage update)
+         */
+        function updateScores(linesCleared, combo) {
+            let points = linesCleared * 100;
+            // 连击额外奖励：Combo x2 额外送 50, Combo x3 额外 100 ...
+            if (combo > 1) {
+                points += (combo - 1) * 50;
+            }
+            currentScore += points;
+            document.getElementById('score').innerText = currentScore;
+            
+            if (currentScore > highScore) {
+                highScore = currentScore;
+                localStorage.setItem('dropdom_high_score', highScore);
+                document.getElementById('high-score').innerText = highScore;
+            }
+        }
+
+        /**
+         * 创建连击特效浮动横幅 (Spawn Combo Floating FX)
+         */
+        function showComboVFX(combo) {
+            const board = document.getElementById('game-board');
+            const vfx = document.createElement('div');
+            vfx.classList.add('combo-vfx');
+            vfx.innerText = `COMBO x${combo}!`;
+            board.appendChild(vfx);
+            
+            // 动画完成后自动销毁 (GC combo text)
+            vfx.addEventListener('animationend', () => {
+                vfx.remove();
+            });
+        }
+
+        /**
+         * 触顶死亡处理 (Trigger Game Over Screen)
+         */
+        function triggerGameOver() {
+            isLocked = true;
+            playSFX('gameover');
+            
+            const overlay = document.getElementById('game-over-overlay');
+            document.getElementById('final-score').innerText = currentScore;
+            overlay.classList.add('visible');
+        }
+
+        /**
+         * 重置整个游戏状态 (System Reboot & State Re-init)
+         */
+        function restartGame() {
+            // 清理数据矩阵 (Wipe grid logic)
+            grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+            currentScore = 0;
+            document.getElementById('score').innerText = 0;
+            
+            // 隐藏死亡遮罩 (Hide overlay)
+            const overlay = document.getElementById('game-over-overlay');
+            overlay.classList.remove('visible');
+            
+            // 灌入初始的两行安全数据并进行降落对齐 (Seed 2 initial rows on start)
+            grid[ROWS - 1] = generateSafeRow();
+            grid[ROWS - 2] = generateSafeRow();
+            
+            // 执行初始沉降
+            settleGravityFull();
+            
+            // 彻底腾空 DOM 重建容器 (Wipe HTML nodes)
+            blocksContainer.innerHTML = '';
+            
+            renderGrid();
+            
+            isLocked = false;
+        }
+
+        /**
+         * 帮助信息说明窗口开关 (Toggle rules overlay)
+         */
+        function toggleHelp(show) {
+            initAudio(); // 辅助激活用户交互声音环境 (Resume audio context on gesture)
+            const helpModal = document.getElementById('help-modal');
+            if (show) {
+                helpModal.classList.add('visible');
+            } else {
+                helpModal.classList.remove('visible');
+            }
+        }
+
+        // ==========================================
+        // 9. 游戏自启动 (Auto bootstrap)
+        // ==========================================
+        // 首次开启直接调用启动 (Boot up the grid)
+        grid[ROWS - 1] = generateSafeRow();
+        grid[ROWS - 2] = generateSafeRow();
+        settleGravityFull();
+        renderGrid();
+    </script>
+</body>
+</html>
