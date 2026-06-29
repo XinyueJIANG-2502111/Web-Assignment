@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEON SLIDE - 霓虹滑动消除方块</title>
+    <title>NEON SLIDE - assignment</title>
     <!-- Import Google Fonts for futuristic cyberpunk theme / 引入未来感赛博朋克字体 -->
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -602,12 +602,12 @@
             </div>
             <div class="modal-body">
                 <ul>
-                    <li><strong>拖拽滑动 (Drag Blocks):</strong> 左右水平拖拽方块，不允许纵向移动。(Drag blocks horizontally. Y-axis is locked.)</li>
-                    <li><strong>重力下落 (Gravity Settle):</strong> 玩家松开手指后，悬空的方块会根据重力受控垂直坠落。(Unsuppoted blocks fall under gravity after release.)</li>
-                    <li><strong>满行消除 (Clear Lines):</strong> 填满任意横向整行即可消除并斩得分数！(Fill an entire row to clear it and score points.)</li>
-                    <li><strong>连续爆发 (Combo Multiplier):</strong> 如果消除引起的坠落引发了新一轮消除，将激发 Combo 分数倍增！(Consecutive drops leading to clears trigger Combo multiplier bonuses.)</li>
-                    <li><strong>系统推移 (Grid Shift):</strong> 每一回合结束时，棋盘整体向上位移一行，底部推入一排安全方块。(At turn end, board shifts up, pushing a new row from bottom.)</li>
-                    <li><strong>触顶超载 (Game Over):</strong> 若有任何方块被挤入最顶层 (y=0)，系统崩溃，游戏结束！(If any block enters row y=0, game is over.)</li>
+                    <li><strong>ブロックのドラッグ (Drag Blocks):</strong> 横方向の移動のみ可能です。(Drag blocks horizontally. Y-axis is locked.)</li>
+                    <li><strong>重力落下 (Gravity Settle):</strong> ブロックから手を離すと、宙に浮いたブロックが重力に従って垂直に落下します。(Unsupported blocks fall under gravity after release.)</li>
+                    <li><strong>ライン消去 (Clear Lines):</strong> 横一列をブロックで満たすとラインが消去され、スコアを獲得できます！(Fill an entire row to clear it and score points.)</li>
+                    <li><strong>コンボ連鎖 (Combo Multiplier):</strong> ライン消去による落下でさらに新たなラインが消去されると、コンボボーナスが発生します！(Consecutive drops leading to clears trigger Combo multiplier bonuses.)</li>
+                    <li><strong>グリッドの押し上げ (Grid Shift):</strong> ターン終了時に盤面全体が1行押し上げられ、最下部に安全な新しい行が追加されます。(At turn end, board shifts up, pushing a new row from bottom.)</li>
+                    <li><strong>ゲームオーバー (Game Over):</strong> ブロックが最上層（y=0）に達するとシステムオーバーロードとなり、ゲーム終了となります！(If any block enters row y=0, game is over.)</li>
                 </ul>
             </div>
             <div class="modal-footer">
