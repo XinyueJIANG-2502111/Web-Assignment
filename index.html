@@ -149,7 +149,7 @@
         .game-board {
             position: relative;
             width: var(--board-width);
-            height: var(--board-height);
+            height: calc(var(--board-height) + 20px); /* 增加 20px 作为底部预览区高度 (Add 20px height for bottom preview area) */
             background-color: #0b0f24;
             border-radius: 10px;
             overflow: hidden;
@@ -174,7 +174,7 @@
             grid-template-columns: repeat(var(--cols), var(--cell-size));
             grid-template-rows: repeat(var(--rows), var(--cell-size));
             width: 100%;
-            height: 100%;
+            height: var(--board-height); /* 设置固定高度防止底排预览区拉伸背景网格 (Fix height to prevent stretching background cells) */
             position: absolute;
             top: 0; left: 0;
             z-index: 1;
@@ -194,6 +194,46 @@
             width: 100%; height: 100%;
             z-index: 2;
             pointer-events: none;
+        }
+
+        /* 下回合新行预览区样式 (Preview Row Styles) */
+        .preview-row-container {
+            position: absolute;
+            top: var(--board-height);
+            left: 0;
+            width: 100%;
+            height: 20px;
+            background-color: rgba(6, 9, 22, 0.85);
+            border-top: 1px dashed rgba(5, 223, 215, 0.15);
+            box-sizing: border-box;
+            z-index: 5;
+        }
+
+        .preview-strip {
+            position: absolute;
+            height: 6px;
+            top: 7px;
+            border-radius: 3px;
+            box-shadow: 0 0 8px var(--glow-color);
+            opacity: 0.65;
+            transition: left 0.15s ease-out, width 0.15s ease-out;
+        }
+
+        .preview-strip[data-size="1"] {
+            background: linear-gradient(90deg, #ff007f, #7f00ff);
+            --glow-color: var(--color-neon-pink);
+        }
+        .preview-strip[data-size="2"] {
+            background: linear-gradient(90deg, #00f2fe, #4facfe);
+            --glow-color: var(--color-neon-cyan);
+        }
+        .preview-strip[data-size="3"] {
+            background: linear-gradient(90deg, #00ff87, #60efff);
+            --glow-color: var(--color-neon-green);
+        }
+        .preview-strip[data-size="4"] {
+            background: linear-gradient(90deg, #ff9900, #ff007f);
+            --glow-color: var(--color-neon-gold);
         }
 
         /* ==========================================
@@ -566,6 +606,8 @@
                 <div class="grid-background" id="grid-background"></div>
                 <!-- 渲染方块的实体容器 -->
                 <div class="blocks-container" id="blocks-container"></div>
+                <!-- 下回合新行提示区 (Preview Row Area) -->
+                <div class="preview-row-container" id="preview-row-container"></div>
                 
                 <!-- 游戏结束面板 -->
                 <div class="overlay" id="game-over-overlay">
@@ -642,6 +684,7 @@
         document.getElementById('high-score').innerText = highScore;
 
         let isLocked = false; // 状态锁：在动画播放和结算期间拦截用户输入 (Status lock to block user inputs during animations)
+        let nextRow = null; // 下一回合即将生成的新行缓存 (Cache for next turn's safe row)
 
         // 统一延迟辅助函数 (Delay Helper Promise)
         const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -654,6 +697,34 @@
         // 获取当前自适应下的每个格子像素大小 (Read dynamic cell size based on CSS runtime)
         function getCellSize() {
             return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size')) || 55;
+        }
+
+        /**
+         * 渲染最底部的下回合生成预览条 (Render next turn block previews below y=9)
+         */
+        function renderPreviewRow() {
+            const container = document.getElementById('preview-row-container');
+            if (!container) return;
+            container.innerHTML = '';
+            const renderedIds = new Set();
+
+            for (let x = 0; x < COLS; x++) {
+                let cell = nextRow[x];
+                if (cell !== null && !renderedIds.has(cell.id)) {
+                    const stripEl = document.createElement('div');
+                    stripEl.classList.add('preview-strip');
+                    stripEl.setAttribute('data-size', cell.size);
+                    
+                    // 使用 CSS calc 动态计算宽度和左偏移量，以获得响应式自适应支持
+                    // Use CSS calc to make coordinates responsive to --cell-size transitions
+                    stripEl.style.left = `calc(${x} * var(--cell-size) + 4px)`;
+                    stripEl.style.width = `calc(${cell.size} * var(--cell-size) - 8px)`;
+                    
+                    container.appendChild(stripEl);
+                    renderedIds.add(cell.id);
+                    x += (cell.size - 1);
+                }
+            }
         }
 
         // ==========================================
@@ -1377,12 +1448,19 @@
                 }
             }
             
-            // 底部生成一排带 isNewRow = true 入场标记的安全新行
-            // Fill bottom row with generated blocks and slide flags
-            let newRow = generateSafeRow(true);
+            // 底部写入预先生成的下回合新行，并赋予 isNewRow = true 进场动效标记
+            // Push pre-generated nextRow to the bottom row, and flag with isNewRow for entry transitions
             for (let x = 0; x < COLS; x++) {
-                grid[ROWS - 1][x] = newRow[x];
+                grid[ROWS - 1][x] = nextRow[x];
+                if (grid[ROWS - 1][x] !== null) {
+                    grid[ROWS - 1][x].isNewRow = true;
+                }
             }
+            
+            // 产生下一个回合的新行缓存，并刷新预览渲染
+            // Cache the row for the next turn and update the preview display
+            nextRow = generateSafeRow();
+            renderPreviewRow();
             
             // 驱动渲染引擎：这会促使老方块向 y-1 滑行，同时新底盘从下方滑入 (Animate both shifts)
             renderGrid();
@@ -1455,6 +1533,10 @@
             const overlay = document.getElementById('game-over-overlay');
             overlay.classList.remove('visible');
             
+            // 重新初始化下回合预览行缓存，并刷新渲染 (Re-init preview row and draw)
+            nextRow = generateSafeRow();
+            renderPreviewRow();
+
             // 灌入初始的两行安全数据并进行降落对齐 (Seed 2 initial rows on start)
             grid[ROWS - 1] = generateSafeRow();
             grid[ROWS - 2] = generateSafeRow();
@@ -1486,6 +1568,10 @@
         // ==========================================
         // 9. 游戏自启动 (Auto bootstrap)
         // ==========================================
+        // 首次开启初始化预览行缓存并渲染 (Initialize preview row on start)
+        nextRow = generateSafeRow();
+        renderPreviewRow();
+
         // 首次开启直接调用启动 (Boot up the grid)
         grid[ROWS - 1] = generateSafeRow();
         grid[ROWS - 2] = generateSafeRow();
